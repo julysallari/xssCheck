@@ -8,13 +8,14 @@ import org.junit.Test;
 
 public class Tests {
 
+	int MAX_THREADS = 10;
 	String TEST_URL = "https://xss-game.appspot.com/level1/frame";
 	Form TEST_FORM;
 	List<Form> TEST_FORMS_LIST = new LinkedList<Form>();
 	
 	@Test
 	public void testAttackOnVuln() {
-		App app = new App();
+		App app = new App(MAX_THREADS);
 		TEST_FORM = new Form("GET");
 		TEST_FORM.addInput("query");
 		TEST_FORMS_LIST.add(TEST_FORM);
@@ -24,7 +25,7 @@ public class Tests {
 	
 	@Test
 	public void testAttackNotOnVuln() {
-		App app = new App();
+		App app = new App(MAX_THREADS);
 		TEST_FORM = new Form("POST");
 		TEST_FORM.addInput("q");
 		TEST_FORMS_LIST.add(TEST_FORM);

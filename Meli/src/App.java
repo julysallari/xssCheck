@@ -4,12 +4,14 @@ import java.net.HttpURLConnection;
 import java.net.MalformedURLException;
 import java.net.URL;
 import java.sql.Connection;
-import java.sql.ResultSet;
 import java.sql.SQLException;
 import java.sql.Statement;
 import java.util.ArrayList;
 import java.util.LinkedList;
 import java.util.List;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
+import java.util.concurrent.TimeUnit;
 
 import javax.net.ssl.HttpsURLConnection;
 
@@ -20,21 +22,27 @@ import org.jsoup.select.Elements;
 
 public class App {
 
-	private String ATTACK_STR_PARAM = "=<script>alert('in')</script>&";
+	private long THREAD_ASLEEP = 3600;
+	private int SECONDS_AWAIT = 5;
+	private String ATTACK_STR_PARAM = "=<script>alert('in')</script>&"; //<img src=x onerror="alert(document.cookie);
 	private final String USER_AGENT = "Mozilla/5.0";
 	private List<String> links;
+	private ExecutorService executor;
 	
-	public App() {
+	public App(int threads) {
 		links = new ArrayList<String>();
+		if(threads > 0){
+			executor = Executors.newFixedThreadPool(threads);
+		}
 	}
 
 	public static void main(String[] args) {
 		try {
 			String str_url = args[0];
 			URL url = new URL(str_url.toString());
-			//URI uri = url.toURI();
 			
-			App app = new App();
+			int threads = Integer.valueOf(args[1]);
+			App app = new App(threads);
 			app.startCheck(url);
 			
 		} catch (MalformedURLException e) {
@@ -46,13 +54,6 @@ public class App {
 		String attr = "";
 		try {
 			Document doc = Jsoup.connect(url.toString()).get();
-			Elements links = doc.select("a[href]"); 
-			for (Element link : links) { 
-				attr = link.attr("abs:href");
-				if(attr.indexOf(url.getHost()) != -1){
-					startCheck(new URL(attr));
-				}
-			} 
 			Elements inputs = null;
 			Elements texts = null;
 			Elements forms = doc.select("form");
@@ -77,6 +78,14 @@ public class App {
 				System.out.println("The URL: "+ url.toString() +" is XSS vulnerable!");
 			}
 			
+			Elements links = doc.select("a[href]"); 
+			for (Element link : links) { 
+				attr = link.attr("abs:href");
+				if(attr.indexOf(url.getHost()) != -1){
+					startCheck(new URL(attr));
+				}
+			} 
+			
 		} catch (IOException e) {
 			System.out.println("Something went wrong... " + e.getMessage());
 		} 
@@ -88,11 +97,23 @@ public class App {
 			     public void run(){
 			        System.out.println("Running: " + url);
 			        extractData(url);
+			        try {
+						Thread.sleep(THREAD_ASLEEP);
+					} catch (InterruptedException e) {
+						System.out.println("Something went wrong while sleeping: " + e.getMessage());
+					}
 			     }
 			   };
 	
-			   Thread thread = new Thread(r_url);
-			   thread.start();
+			   executor.submit(r_url);
+			   try {
+					executor.awaitTermination(SECONDS_AWAIT, TimeUnit.SECONDS);
+				} catch (InterruptedException e) {
+					System.out.println("Something went wrong while waiting: " + e.getMessage());
+				}
+			   executor.shutdown();
+
+		    //System.out.println("Finished all threads");
 		}
 	}
 
