@@ -22,15 +22,17 @@ import org.jsoup.select.Elements;
 
 public class App {
 
-	private long THREAD_ASLEEP = 3600;
+	private long THREAD_ASLEEP = 1000;
 	private int SECONDS_AWAIT = 5;
 	private String ATTACK_STR_PARAM = "=<script>alert('in')</script>&"; //<img src=x onerror="alert(document.cookie);
 	private final String USER_AGENT = "Mozilla/5.0";
-	private List<String> links;
+	private List<String> visited_links;
+	private LinkedList<URL> urls;
 	private ExecutorService executor;
 	
 	public App(int threads) {
-		links = new ArrayList<String>();
+		visited_links = new ArrayList<String>();
+		urls = new LinkedList<URL>();
 		if(threads > 0){
 			executor = Executors.newFixedThreadPool(threads);
 		}
@@ -82,7 +84,8 @@ public class App {
 			for (Element link : links) { 
 				attr = link.attr("abs:href");
 				if(attr.indexOf(url.getHost()) != -1){
-					startCheck(new URL(attr));
+					//startCheck(new URL(attr));
+					addURL(new URL(attr));
 				}
 			} 
 			
@@ -91,38 +94,57 @@ public class App {
 		} 
 	}
 	
-	private void startCheck(final URL url) {
-		if(!visited(url.toString())){
-			Runnable r_url = new Runnable(){
-			     public void run(){
-			        System.out.println("Running: " + url);
-			        extractData(url);
-			        try {
-						Thread.sleep(THREAD_ASLEEP);
+	private void startCheck(URL init) {
+		urls.addLast(init);
+		while(!executor.isShutdown()){
+				Runnable r_url = new Runnable(){
+				     public void run(){
+				    	URL url = removeURL();
+						if(!visited(url.toString())){
+					        System.out.println("Running: " + url);
+					        extractData(url);
+					        try {
+								Thread.sleep(THREAD_ASLEEP);
+							} catch (InterruptedException e) {
+								System.out.println("Something went wrong while sleeping: " + e.getMessage());
+							}
+						}
+				     }
+				   };
+		
+				   
+				   executor.submit(r_url);
+				   synchronized(urls){
+					   if(urls.isEmpty()){
+						   executor.shutdown();
+					   }
+				   }
+				   
+				   try {
+						executor.awaitTermination(SECONDS_AWAIT, TimeUnit.SECONDS);
 					} catch (InterruptedException e) {
-						System.out.println("Something went wrong while sleeping: " + e.getMessage());
+						System.out.println("Something went wrong while waiting: " + e.getMessage());
 					}
-			     }
-			   };
-	
-			   executor.submit(r_url);
-			   try {
-					executor.awaitTermination(SECONDS_AWAIT, TimeUnit.SECONDS);
-				} catch (InterruptedException e) {
-					System.out.println("Something went wrong while waiting: " + e.getMessage());
-				}
-			   executor.shutdown();
-
-		    //System.out.println("Finished all threads");
+			    //System.out.println("Finished all threads");
 		}
 	}
 
 	private synchronized boolean visited(String url){
-		if(links.contains(url)){
+		if(visited_links.contains(url)){
 			return true;
 		}
-		links.add(url);
+		visited_links.add(url);
 		return false;
+	}
+	
+	private synchronized void addURL(URL url){
+		if(!urls.contains(url)){
+			urls.addLast(url);
+		}
+	}
+	
+	private synchronized URL removeURL(){
+		return urls.removeFirst();
 	}
 	
 	public boolean attack(String url, List<Form> forms){
